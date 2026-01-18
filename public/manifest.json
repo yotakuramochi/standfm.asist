@@ -1,0 +1,21 @@
+{
+    "name": "スタエフ AIアシスタント",
+    "short_name": "スタエフAI",
+    "description": "stand.fm配信者のための音声コンテンツ自動化ツール",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#1a1b1d",
+    "theme_color": "#ee7711",
+    "icons": [
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
