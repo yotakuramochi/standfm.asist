@@ -19,6 +19,10 @@ export default function AudioUploader({ onFileSelect }: AudioUploaderProps) {
         if (file) {
             onFileSelect(file)
         }
+        // Reset input to allow selecting the same file again
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+        }
     }
 
     const handleDrop = (e: React.DragEvent) => {
@@ -38,6 +42,9 @@ export default function AudioUploader({ onFileSelect }: AudioUploaderProps) {
     const handleDragLeave = () => {
         setIsDragging(false)
     }
+
+    // Check if mobile device
+    const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
     return (
         <div
@@ -68,26 +75,26 @@ export default function AudioUploader({ onFileSelect }: AudioUploaderProps) {
             {/* Text */}
             <div className="text-center space-y-3">
                 <p className="text-xl sm:text-2xl font-medium text-gray-800">
-                    {isDragging ? '離してアップロード' : '音声ファイルをドラッグ＆ドロップ'}
+                    {isDragging ? '離してアップロード' : 'タップして音声を選択'}
                 </p>
                 <p className="text-base text-gray-500">
-                    または、クリックしてファイルを選択
+                    「ファイル」アプリや「ボイスメモ」から選択できます
                 </p>
                 <p className="text-sm text-gray-400">
-                    対応形式: mp3, m4a, wav, webm（30MB以下）
+                    対応形式: mp3, m4a, wav, webm, caf（30MB以下）
                 </p>
             </div>
 
             {/* Button */}
-            <div className="mt-8 px-8 py-4 rounded-full bg-orange-500 text-white font-medium text-lg hover:bg-orange-600 transition-colors">
-                ファイルを選択
+            <div className="mt-8 px-8 py-4 rounded-full bg-orange-500 text-white font-medium text-lg hover:bg-orange-600 transition-colors active:bg-orange-700">
+                📁 ファイルを選択
             </div>
 
-            {/* Hidden file input */}
+            {/* Hidden file input - iOS compatible */}
             <input
                 ref={fileInputRef}
                 type="file"
-                accept="audio/*"
+                accept="audio/*,.mp3,.m4a,.wav,.webm,.caf,.aac,.ogg,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/webm,audio/aac,audio/ogg,audio/x-caf"
                 onChange={handleFileChange}
                 className="hidden"
             />

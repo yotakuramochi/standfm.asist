@@ -109,15 +109,23 @@ export default function Home() {
 
     const handleFileSelect = async (file: File) => {
         const maxSize = 30 * 1024 * 1024
-        const allowedTypes = ['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/wav', 'audio/webm']
+
+        // iOS Safari often returns empty or incorrect MIME types
+        // Check file extension instead for better compatibility
+        const allowedExtensions = ['.mp3', '.m4a', '.wav', '.webm', '.caf', '.aac', '.ogg']
+        const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
 
         if (file.size > maxSize) {
             setError('ファイルサイズは30MB以下にしてください')
             return
         }
 
-        if (!allowedTypes.some(type => file.type.includes(type.split('/')[1]))) {
-            setError('対応形式: mp3, m4a, wav, webm')
+        // Check by extension (more reliable on iOS) or MIME type
+        const hasValidExtension = allowedExtensions.includes(fileExtension)
+        const hasValidMimeType = file.type.startsWith('audio/')
+
+        if (!hasValidExtension && !hasValidMimeType) {
+            setError('対応形式: mp3, m4a, wav, webm, caf, aac, ogg')
             return
         }
 
