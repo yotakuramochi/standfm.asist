@@ -11,12 +11,15 @@ export default function AudioUploader({ onFileSelect }: AudioUploaderProps) {
     const [isDragging, setIsDragging] = useState(false)
 
     const handleClick = () => {
+        // Focus and click for better mobile compatibility
+        fileInputRef.current?.focus()
         fileInputRef.current?.click()
     }
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (file) {
+            console.log('File selected:', file.name, file.type, file.size)
             onFileSelect(file)
         }
         // Reset input to allow selecting the same file again
@@ -42,9 +45,6 @@ export default function AudioUploader({ onFileSelect }: AudioUploaderProps) {
     const handleDragLeave = () => {
         setIsDragging(false)
     }
-
-    // Check if mobile device
-    const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
     return (
         <div
@@ -78,10 +78,10 @@ export default function AudioUploader({ onFileSelect }: AudioUploaderProps) {
                     {isDragging ? '離してアップロード' : 'タップして音声を選択'}
                 </p>
                 <p className="text-base text-gray-500">
-                    「ファイル」アプリや「ボイスメモ」から選択できます
+                    ファイル / Googleドライブ / ボイスメモ
                 </p>
                 <p className="text-sm text-gray-400">
-                    対応形式: mp3, m4a, wav, webm, caf（30MB以下）
+                    対応形式: mp3, m4a, wav（30MB以下）
                 </p>
             </div>
 
@@ -90,13 +90,17 @@ export default function AudioUploader({ onFileSelect }: AudioUploaderProps) {
                 📁 ファイルを選択
             </div>
 
-            {/* Hidden file input - iOS compatible */}
+            {/* 
+        シンプルな audio/* のみ - iOS/Android両対応
+        これでFiles/ファイル/Googleドライブなどから選択可能
+      */}
             <input
                 ref={fileInputRef}
                 type="file"
-                accept="audio/*,.mp3,.m4a,.wav,.webm,.caf,.aac,.ogg,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/webm,audio/aac,audio/ogg,audio/x-caf"
+                accept="audio/*"
                 onChange={handleFileChange}
                 className="hidden"
+                aria-label="音声ファイルを選択"
             />
         </div>
     )
