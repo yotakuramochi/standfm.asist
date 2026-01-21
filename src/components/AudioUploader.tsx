@@ -81,7 +81,7 @@ export default function AudioUploader({ onFileSelect }: AudioUploaderProps) {
                     ファイル / Googleドライブ / ボイスメモ
                 </p>
                 <p className="text-sm text-gray-400">
-                    対応形式: mp3, m4a, wav（30MB以下）
+                    対応形式: mp3, m4a, wav（4.5MB以下）
                 </p>
             </div>
 

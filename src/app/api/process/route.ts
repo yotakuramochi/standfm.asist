@@ -18,10 +18,10 @@ export async function POST(request: Request) {
             )
         }
 
-        // Validate file size (30MB max)
-        if (audioFile.size > 30 * 1024 * 1024) {
+        // Validate file size (4.5MB max - Vercel API Routes limit)
+        if (audioFile.size > 4.5 * 1024 * 1024) {
             return NextResponse.json(
-                { error: 'ファイルサイズは30MB以下にしてください' },
+                { error: 'ファイルサイズは4.5MB以下にしてください（Vercel制限）' },
                 { status: 400 }
             )
         }

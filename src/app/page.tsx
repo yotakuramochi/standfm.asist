@@ -108,7 +108,8 @@ export default function Home() {
     }
 
     const handleFileSelect = async (file: File) => {
-        const maxSize = 30 * 1024 * 1024
+        // Vercel API Routes have a 4.5MB body size limit
+        const maxSize = 4.5 * 1024 * 1024
 
         // iOS Safari often returns empty or incorrect MIME types
         // Check file extension instead for better compatibility
@@ -116,7 +117,7 @@ export default function Home() {
         const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
 
         if (file.size > maxSize) {
-            setError('ファイルサイズは30MB以下にしてください')
+            setError('ファイルサイズは4.5MB以下にしてください（Vercel制限）。長い音声は分割してお試しください。')
             return
         }
 
@@ -155,8 +156,18 @@ export default function Home() {
             setStatus('generating')
 
             if (!response.ok) {
-                const errorData = await response.json()
-                throw new Error(errorData.error || '処理に失敗しました')
+                // Handle both JSON and text error responses (Vercel may return plain text)
+                const contentType = response.headers.get('content-type')
+                if (contentType && contentType.includes('application/json')) {
+                    const errorData = await response.json()
+                    throw new Error(errorData.error || '処理に失敗しました')
+                } else {
+                    const errorText = await response.text()
+                    if (errorText.includes('Request Entity Too Large') || response.status === 413) {
+                        throw new Error('ファイルサイズが大きすぎます。4.5MB以下のファイルをお試しください。')
+                    }
+                    throw new Error(`エラー: ${errorText.substring(0, 100)}`)
+                }
             }
 
             setProgress(100)
