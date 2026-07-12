@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { upload } from '@vercel/blob/client'
 import AudioUploader from '@/components/AudioUploader'
 import ProgressIndicator from '@/components/ProgressIndicator'
 import ResultCard from '@/components/ResultCard'
@@ -14,6 +15,9 @@ interface GeneratedContent {
     titles: string[]
     description: string
     xPost: string
+    noteArticle: string
+    substackLetter: string
+    journalSynced?: boolean
 }
 
 interface ProfileSettings {
@@ -33,6 +37,19 @@ const TONE_PRESETS = [
 
 const HISTORY_KEY = 'standfm-ai-history'
 const PROFILE_KEY = 'standfm-ai-profile'
+
+// sw.jsが共有音声を保管するCache Storageの場所(public/sw.jsと揃えること)
+const SHARED_AUDIO_CACHE = 'shared-audio'
+const SHARED_AUDIO_KEY = '/__shared-audio'
+
+function loadProfileFromStorage(): ProfileSettings | null {
+    try {
+        const stored = localStorage.getItem(PROFILE_KEY)
+        return stored ? JSON.parse(stored) : null
+    } catch {
+        return null
+    }
+}
 
 function buildDescriptionWithTemplate(aiDescription: string, profile: ProfileSettings | null): string {
     if (!profile) return aiDescription
@@ -77,6 +94,7 @@ function SharePageContent() {
     const [profile, setProfile] = useState<ProfileSettings | null>(null)
     const [sharedFile, setSharedFile] = useState<File | null>(null)
     const [sharedText, setSharedText] = useState<string>('')
+    const sharedHandledRef = useRef(false)
 
     useEffect(() => {
         const stored = localStorage.getItem(PROFILE_KEY)
@@ -96,7 +114,53 @@ function SharePageContent() {
         if (title || text || url) {
             setSharedText([title, text, url].filter(Boolean).join('\n'))
         }
+
+        const errorParam = searchParams.get('error')
+        if (errorParam === 'too-large') {
+            setError('共有経由で受け取れるのは4MBまででした。下のボタンからファイルを選び直してください(24MBまでOK)。')
+        } else if (errorParam) {
+            setError('共有された音声を受け取れませんでした。下のボタンからファイルを選び直してください。')
+        }
+
+        // 共有音声の処理は一度だけ(StrictModeの二重実行・再レンダー対策)
+        if (sharedHandledRef.current) return
+
+        // SW経由: 端末内(Cache Storage)に保管された音声を取り出す
+        if (searchParams.get('sharedAudio') === '1') {
+            sharedHandledRef.current = true
+            loadSharedAudioFromCache()
+            return
+        }
+
+        // フォールバック経由: /api/shareがVercel Blobに保存した音声URLを処理する
+        const blobUrl = searchParams.get('blobUrl')
+        if (blobUrl) {
+            sharedHandledRef.current = true
+            processBlobUrl(blobUrl, searchParams.get('fileName') || 'shared-audio.m4a')
+        }
     }, [searchParams])
+
+    const loadSharedAudioFromCache = async () => {
+        try {
+            const cache = await caches.open(SHARED_AUDIO_CACHE)
+            const cached = await cache.match(SHARED_AUDIO_KEY)
+
+            if (!cached) {
+                setError('共有された音声が見つかりませんでした。下のボタンからファイルを選び直してください。')
+                return
+            }
+
+            const blob = await cached.blob()
+            const name =
+                decodeURIComponent(cached.headers.get('X-Shared-File-Name') || '') || 'shared-audio.m4a'
+            await cache.delete(SHARED_AUDIO_KEY)
+
+            setSharedFile(new File([blob], name, { type: blob.type }))
+        } catch (e) {
+            console.error('Failed to load shared audio:', e)
+            setError('共有された音声を読み込めませんでした。下のボタンからファイルを選び直してください。')
+        }
+    }
 
     const saveToHistory = (data: GeneratedContent) => {
         try {
@@ -112,6 +176,8 @@ function SharePageContent() {
                 xPost: data.xPost,
                 description: data.description,
                 transcript: data.transcript,
+                noteArticle: data.noteArticle,
+                substackLetter: data.substackLetter,
             }
 
             localStorage.setItem(HISTORY_KEY, JSON.stringify([newItem, ...history]))
@@ -121,12 +187,13 @@ function SharePageContent() {
     }
 
     const handleFileSelect = async (file: File) => {
-        const maxSize = 30 * 1024 * 1024
+        const directUploadLimit = 4 * 1024 * 1024 // 4MB超はVercel Blob経由
+        const maxSize = 24 * 1024 * 1024 // Whisper APIの上限(25MB)に合わせる
         const allowedExtensions = ['.mp3', '.m4a', '.wav', '.webm', '.caf', '.aac', '.ogg']
         const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
 
         if (file.size > maxSize) {
-            setError('ファイルサイズは30MB以下にしてください')
+            setError('ファイルサイズは24MB以下にしてください(15分前後の収録なら通常収まります)')
             return
         }
 
@@ -143,47 +210,93 @@ function SharePageContent() {
         setProgress(0)
 
         try {
-            const formData = new FormData()
-            formData.append('audio', file)
-            formData.append('tone', tonePreset)
+            let response: Response
 
-            const uploadInterval = setInterval(() => {
-                setProgress((prev: number) => Math.min(prev + 10, 90))
-            }, 200)
+            if (file.size > directUploadLimit) {
+                // 4MB超はVercel Blobへ直接アップロードしてからURLを渡す
+                setProgress(20)
+                const blob = await upload(file.name, file, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload',
+                })
 
-            setStatus('transcribing')
-            setProgress(0)
-            clearInterval(uploadInterval)
+                setStatus('transcribing')
+                setProgress(35)
 
+                response = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        blobUrl: blob.url,
+                        fileName: file.name,
+                        tone: tonePreset,
+                    }),
+                })
+            } else {
+                const formData = new FormData()
+                formData.append('audio', file)
+                formData.append('tone', tonePreset)
+
+                setStatus('transcribing')
+                setProgress(35)
+
+                response = await fetch('/api/process', {
+                    method: 'POST',
+                    body: formData,
+                })
+            }
+
+            await handleProcessResponse(response)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : '処理中にエラーが発生しました')
+            setStatus('error')
+        }
+    }
+
+    const handleProcessResponse = async (response: Response) => {
+        setProgress(50)
+        setStatus('generating')
+
+        if (!response.ok) {
+            const errorData = await response.json()
+            throw new Error(errorData.error || '処理に失敗しました')
+        }
+
+        setProgress(100)
+        const result = await response.json()
+
+        if (result.success) {
+            // マウント直後に呼ばれるとprofile stateが未設定のことがあるためstorageも見る
+            const fullDescription = buildDescriptionWithTemplate(
+                result.data.description,
+                profile ?? loadProfileFromStorage()
+            )
+            const processedData = {
+                ...result.data,
+                description: fullDescription,
+            }
+
+            setContent(processedData)
+            saveToHistory(processedData)
+            setStatus('done')
+        } else {
+            throw new Error(result.error || '処理に失敗しました')
+        }
+    }
+
+    const processBlobUrl = async (blobUrl: string, fileName: string) => {
+        setError(null)
+        setStatus('transcribing')
+        setProgress(35)
+
+        try {
             const response = await fetch('/api/process', {
                 method: 'POST',
-                body: formData,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blobUrl, fileName, tone: tonePreset }),
             })
 
-            setProgress(50)
-            setStatus('generating')
-
-            if (!response.ok) {
-                const errorData = await response.json()
-                throw new Error(errorData.error || '処理に失敗しました')
-            }
-
-            setProgress(100)
-            const result = await response.json()
-
-            if (result.success) {
-                const fullDescription = buildDescriptionWithTemplate(result.data.description, profile)
-                const processedData = {
-                    ...result.data,
-                    description: fullDescription,
-                }
-
-                setContent(processedData)
-                saveToHistory(processedData)
-                setStatus('done')
-            } else {
-                throw new Error(result.error || '処理に失敗しました')
-            }
+            await handleProcessResponse(response)
         } catch (err) {
             setError(err instanceof Error ? err.message : '処理中にエラーが発生しました')
             setStatus('error')
@@ -318,6 +431,22 @@ function SharePageContent() {
                         content={content.summary}
                         icon="📋"
                         collapsible
+                    />
+
+                    <ResultCard
+                        title="Note記事(下書き)"
+                        content={content.noteArticle || ''}
+                        icon="📰"
+                        collapsible
+                        defaultCollapsed
+                    />
+
+                    <ResultCard
+                        title="Substackレター(下書き)"
+                        content={content.substackLetter || ''}
+                        icon="✉️"
+                        collapsible
+                        defaultCollapsed
                     />
 
                     <ResultCard
