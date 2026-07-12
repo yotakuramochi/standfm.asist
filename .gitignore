@@ -35,3 +35,11 @@ next-env.d.ts
 
 # Supabase
 supabase/.temp
+
+# Local stand.fm automation
+.standfm-browser-profile/
+.standfm-uploads/
+.npm-cache/
+.vercel-home/
+.vercel-cache/
+.env*

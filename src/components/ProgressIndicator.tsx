@@ -1,6 +1,6 @@
 'use client'
 
-type ProcessingStatus = 'uploading' | 'transcribing' | 'generating'
+type ProcessingStatus = 'uploading' | 'transcribing' | 'generating' | 'saving'
 
 interface ProgressIndicatorProps {
     status: ProcessingStatus
@@ -20,6 +20,10 @@ const STATUS_CONFIG = {
         label: 'コンテンツ生成中...',
         emoji: '✨',
     },
+    saving: {
+        label: 'stand.fm 下書き保存中...',
+        emoji: '💾',
+    },
 }
 
 export default function ProgressIndicator({ status, progress }: ProgressIndicatorProps) {
@@ -29,6 +33,7 @@ export default function ProgressIndicator({ status, progress }: ProgressIndicato
         { key: 'uploading', label: 'アップロード' },
         { key: 'transcribing', label: '文字起こし' },
         { key: 'generating', label: '生成' },
+        { key: 'saving', label: '保存' },
     ]
 
     const currentIndex = steps.findIndex(s => s.key === status)

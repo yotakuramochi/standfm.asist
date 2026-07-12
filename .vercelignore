@@ -1,0 +1,10 @@
+.env
+.env.local
+.env*.local
+.vercel-home/
+.vercel-cache/
+.npm-cache/
+.standfm-browser-profile/
+.standfm-uploads/
+.next/
+node_modules/
