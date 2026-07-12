@@ -105,6 +105,9 @@ export default function Home() {
         status: 'idle',
         message: 'stand.fm にログインしておくと、生成後に下書き保存まで進めます。',
     })
+    // Chrome自動操作はこのサーバーがMac上(localhost)で動いているときだけ使える。
+    // 本番(Vercel)ではPC/スマホ問わず動かないので、ログイン導線を出さない
+    const [automationAvailable, setAutomationAvailable] = useState(false)
 
     useEffect(() => {
         const stored = localStorage.getItem(PROFILE_KEY)
@@ -115,6 +118,17 @@ export default function Home() {
             } catch (e) {
                 console.error('Failed to parse profile:', e)
             }
+        }
+
+        const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+        setAutomationAvailable(isLocal)
+
+        if (!isLocal) {
+            setStandfm({
+                status: 'idle',
+                message:
+                    'スマホではstand.fmへのログインは不要です。生成後に「タイトル+概要欄をコピー」して、stand.fm公式アプリの投稿画面に貼り付けてください。',
+            })
         }
     }, [])
 
@@ -234,12 +248,19 @@ export default function Home() {
         setAudioFile(file)
         setContent(null)
         setError(null)
-        setStandfm({
-            status: autoSaveToStandfm ? 'idle' : standfm.status,
-            message: autoSaveToStandfm
-                ? '生成後に stand.fm へ下書き保存します。'
-                : '生成だけ行います。必要ならあとで下書き保存できます。',
-        })
+        setStandfm(
+            automationAvailable
+                ? {
+                    status: autoSaveToStandfm ? 'idle' : standfm.status,
+                    message: autoSaveToStandfm
+                        ? '生成後に stand.fm へ下書き保存します。'
+                        : '生成だけ行います。必要ならあとで下書き保存できます。',
+                }
+                : {
+                    status: 'idle',
+                    message: '生成後に「タイトル＋概要欄をコピー」して、stand.fm公式アプリに貼り付けてください。',
+                }
+        )
         setStatus('uploading')
         setProgress(10)
 
@@ -323,10 +344,16 @@ export default function Home() {
                 return
             }
 
-            if (autoSaveToStandfm) {
+            if (autoSaveToStandfm && automationAvailable) {
                 setStatus('saving')
                 setProgress(90)
                 await saveGeneratedToStandfm(processedData, file)
+            } else if (!automationAvailable) {
+                // 本番環境では自動保存できない。音声をサーバーへ送り直して失敗するより先に案内を出す
+                setStandfm({
+                    status: 'needs_attention',
+                    message: '生成できました。「タイトル＋概要欄をコピー」を押して、stand.fm公式アプリの投稿画面に貼り付けてください。',
+                })
             }
 
             setProgress(100)
@@ -438,14 +465,16 @@ export default function Home() {
                                 stand.fmを開く
                             </a>
                         )}
-                        <button
-                            onClick={openStandfmLogin}
-                            disabled={standfm.status === 'opening' || status === 'saving'}
-                            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                        >
-                            {standfm.status === 'opening' ? '起動中...' : 'ログインを開く'}
-                        </button>
-                        {content && audioFile && (
+                        {automationAvailable && (
+                            <button
+                                onClick={openStandfmLogin}
+                                disabled={standfm.status === 'opening' || status === 'saving'}
+                                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                {standfm.status === 'opening' ? '起動中...' : 'ログインを開く'}
+                            </button>
+                        )}
+                        {content && audioFile && automationAvailable && (
                             <button
                                 onClick={handleManualSave}
                                 disabled={status === 'saving' || standfm.status === 'saving'}
@@ -495,22 +524,24 @@ export default function Home() {
                         </div>
                     </section>
 
-                    <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
-                        <label className="flex items-center justify-between gap-4">
-                            <span>
-                                <span className="block font-bold text-gray-900">生成後に投稿準備まで進める</span>
-                                <span className="mt-1 block text-sm text-gray-500">
-                                    可能なら下書き保存、難しい環境ではコピーとstand.fm起動まで進めます。
+                    {automationAvailable && (
+                        <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+                            <label className="flex items-center justify-between gap-4">
+                                <span>
+                                    <span className="block font-bold text-gray-900">生成後に投稿準備まで進める</span>
+                                    <span className="mt-1 block text-sm text-gray-500">
+                                        可能なら下書き保存、難しい環境ではコピーとstand.fm起動まで進めます。
+                                    </span>
                                 </span>
-                            </span>
-                            <input
-                                type="checkbox"
-                                checked={autoSaveToStandfm}
-                                onChange={(event) => setAutoSaveToStandfm(event.target.checked)}
-                                className="h-5 w-5 accent-teal-600"
-                            />
-                        </label>
-                    </section>
+                                <input
+                                    type="checkbox"
+                                    checked={autoSaveToStandfm}
+                                    onChange={(event) => setAutoSaveToStandfm(event.target.checked)}
+                                    className="h-5 w-5 accent-teal-600"
+                                />
+                            </label>
+                        </section>
+                    )}
 
                     <section className="mb-4">
                         <div className="grid grid-cols-2 rounded-lg border border-gray-200 bg-white p-1">
