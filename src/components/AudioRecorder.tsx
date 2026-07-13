@@ -92,7 +92,9 @@ export default function AudioRecorder({ onFileReady }: AudioRecorderProps) {
             }
 
             recorder.onstop = () => {
-                const type = recorder.mimeType || mimeType || 'audio/webm'
+                // MediaRecorderは音声のみでも "video/webm" 等のコンテナ型を名乗ることがあるので audio/ に正規化
+                const rawType = recorder.mimeType || mimeType || 'audio/webm'
+                const type = rawType.replace(/^video\//, 'audio/')
                 const blob = new Blob(chunksRef.current, { type })
                 const ext = extensionForMimeType(type)
                 const file = new File([blob], `standfm-recording-${Date.now()}.${ext}`, { type })

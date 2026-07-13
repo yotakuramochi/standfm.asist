@@ -14,11 +14,9 @@ export async function POST(request: Request): Promise<NextResponse> {
             body,
             request,
             onBeforeGenerateToken: async () => ({
-                allowedContentTypes: [
-                    'audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/m4a',
-                    'audio/wav', 'audio/x-wav', 'audio/webm', 'audio/ogg',
-                    'audio/aac', 'audio/x-caf',
-                ],
+                // ワイルドカード必須: ブラウザ録音は "audio/webm;codecs=opus" のようにcodecs付きで返り、
+                // さらにMediaRecorderは音声のみでも "video/webm" / "video/mp4" を名乗ることがある
+                allowedContentTypes: ['audio/*', 'video/webm', 'video/mp4'],
                 maximumSizeInBytes: 24 * 1024 * 1024, // Whisper APIの25MB上限に合わせる
                 addRandomSuffix: true,
                 // 音声は一時ファイル扱い。定期的に消したい場合はVercelダッシュボードから削除
